@@ -335,18 +335,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_follows_count ON follows;
 CREATE TRIGGER trg_follows_count
   AFTER INSERT OR DELETE ON follows
   FOR EACH ROW EXECUTE FUNCTION update_profile_counts();
 
+DROP TRIGGER IF EXISTS trg_posts_count ON posts;
 CREATE TRIGGER trg_posts_count
   AFTER INSERT OR DELETE ON posts
   FOR EACH ROW EXECUTE FUNCTION update_profile_counts();
 
+DROP TRIGGER IF EXISTS trg_likes_count ON likes;
 CREATE TRIGGER trg_likes_count
   AFTER INSERT OR DELETE ON likes
   FOR EACH ROW EXECUTE FUNCTION update_profile_counts();
 
+DROP TRIGGER IF EXISTS trg_comments_count ON comments;
 CREATE TRIGGER trg_comments_count
   AFTER INSERT OR DELETE ON comments
   FOR EACH ROW EXECUTE FUNCTION update_profile_counts();
@@ -365,6 +369,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
@@ -384,48 +389,66 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: public read, own write
+DROP POLICY IF EXISTS profiles_select ON profiles;
 CREATE POLICY profiles_select ON profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS profiles_update ON profiles;
 CREATE POLICY profiles_update ON profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Posts: public read (non-adult), own write
+DROP POLICY IF EXISTS posts_select ON posts;
 CREATE POLICY posts_select ON posts FOR SELECT
   USING (is_adult = FALSE OR creator_id = auth.uid());
+DROP POLICY IF EXISTS posts_insert ON posts;
 CREATE POLICY posts_insert ON posts FOR INSERT
   WITH CHECK (creator_id = auth.uid());
+DROP POLICY IF EXISTS posts_update ON posts;
 CREATE POLICY posts_update ON posts FOR UPDATE
   USING (creator_id = auth.uid());
+DROP POLICY IF EXISTS posts_delete ON posts;
 CREATE POLICY posts_delete ON posts FOR DELETE
   USING (creator_id = auth.uid());
 
--- Post media: follow post access
+-- Post media
+DROP POLICY IF EXISTS post_media_select ON post_media;
 CREATE POLICY post_media_select ON post_media FOR SELECT USING (true);
+DROP POLICY IF EXISTS post_media_insert ON post_media;
 CREATE POLICY post_media_insert ON post_media FOR INSERT
   WITH CHECK (
     EXISTS (SELECT 1 FROM posts WHERE id = post_id AND creator_id = auth.uid())
   );
 
 -- Follows
+DROP POLICY IF EXISTS follows_select ON follows;
 CREATE POLICY follows_select ON follows FOR SELECT USING (true);
+DROP POLICY IF EXISTS follows_insert ON follows;
 CREATE POLICY follows_insert ON follows FOR INSERT
   WITH CHECK (follower_id = auth.uid());
+DROP POLICY IF EXISTS follows_delete ON follows;
 CREATE POLICY follows_delete ON follows FOR DELETE
   USING (follower_id = auth.uid());
 
 -- Likes
+DROP POLICY IF EXISTS likes_select ON likes;
 CREATE POLICY likes_select ON likes FOR SELECT USING (true);
+DROP POLICY IF EXISTS likes_insert ON likes;
 CREATE POLICY likes_insert ON likes FOR INSERT
   WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS likes_delete ON likes;
 CREATE POLICY likes_delete ON likes FOR DELETE
   USING (user_id = auth.uid());
 
 -- Comments
+DROP POLICY IF EXISTS comments_select ON comments;
 CREATE POLICY comments_select ON comments FOR SELECT USING (true);
+DROP POLICY IF EXISTS comments_insert ON comments;
 CREATE POLICY comments_insert ON comments FOR INSERT
   WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS comments_delete ON comments;
 CREATE POLICY comments_delete ON comments FOR DELETE
   USING (user_id = auth.uid());
 
 -- Messages: participants only
+DROP POLICY IF EXISTS messages_select ON messages;
 CREATE POLICY messages_select ON messages FOR SELECT
   USING (
     EXISTS (
@@ -433,6 +456,7 @@ CREATE POLICY messages_select ON messages FOR SELECT
       WHERE conversation_id = messages.conversation_id AND user_id = auth.uid()
     )
   );
+DROP POLICY IF EXISTS messages_insert ON messages;
 CREATE POLICY messages_insert ON messages FOR INSERT
   WITH CHECK (
     sender_id = auth.uid() AND
@@ -443,8 +467,10 @@ CREATE POLICY messages_insert ON messages FOR INSERT
   );
 
 -- Notifications: own only
+DROP POLICY IF EXISTS notifications_select ON notifications;
 CREATE POLICY notifications_select ON notifications FOR SELECT
   USING (user_id = auth.uid());
+DROP POLICY IF EXISTS notifications_update ON notifications;
 CREATE POLICY notifications_update ON notifications FOR UPDATE
   USING (user_id = auth.uid());
 
