@@ -10,28 +10,38 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- for text search
 -- ============================================================
 -- ENUMS
 -- ============================================================
-CREATE TYPE content_type AS ENUM (
-  'photo', 'video', 'audio', 'article',
-  'product', 'course', 'trade_signal', 'adult'
-);
+DO $$ BEGIN
+  CREATE TYPE content_type AS ENUM (
+    'photo', 'video', 'audio', 'article',
+    'product', 'course', 'trade_signal', 'adult'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE media_type AS ENUM ('image', 'video', 'audio');
+DO $$ BEGIN
+  CREATE TYPE media_type AS ENUM ('image', 'video', 'audio');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE post_visibility AS ENUM ('public', 'followers', 'subscribers');
+DO $$ BEGIN
+  CREATE TYPE post_visibility AS ENUM ('public', 'followers', 'subscribers');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE notification_type AS ENUM (
-  'follow', 'like', 'comment', 'message',
-  'subscription', 'tip', 'order', 'system'
-);
+DO $$ BEGIN
+  CREATE TYPE notification_type AS ENUM (
+    'follow', 'like', 'comment', 'message',
+    'subscription', 'tip', 'order', 'system'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE order_status AS ENUM (
-  'pending', 'paid', 'shipped', 'completed', 'cancelled', 'refunded'
-);
+DO $$ BEGIN
+  CREATE TYPE order_status AS ENUM (
+    'pending', 'paid', 'shipped', 'completed', 'cancelled', 'refunded'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ============================================================
 -- PROFILES (extends auth.users)
 -- ============================================================
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id            UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username      TEXT UNIQUE NOT NULL,
   display_name  TEXT,
@@ -50,14 +60,14 @@ CREATE TABLE profiles (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_profiles_username ON profiles(username);
-CREATE INDEX idx_profiles_country ON profiles(country);
-CREATE INDEX idx_profiles_interests ON profiles USING GIN(interests);
+CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
+CREATE INDEX IF NOT EXISTS idx_profiles_country ON profiles(country);
+CREATE INDEX IF NOT EXISTS idx_profiles_interests ON profiles USING GIN(interests);
 
 -- ============================================================
 -- POSTS
 -- ============================================================
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   creator_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   content_type  content_type NOT NULL DEFAULT 'photo',
@@ -71,15 +81,15 @@ CREATE TABLE posts (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_posts_creator ON posts(creator_id, created_at DESC);
-CREATE INDEX idx_posts_feed ON posts(created_at DESC) WHERE is_adult = FALSE;
-CREATE INDEX idx_posts_adult ON posts(created_at DESC) WHERE is_adult = TRUE;
-CREATE INDEX idx_posts_content_type ON posts(content_type);
+CREATE INDEX IF NOT EXISTS idx_posts_creator ON posts(creator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_feed ON posts(created_at DESC) WHERE is_adult = FALSE;
+CREATE INDEX IF NOT EXISTS idx_posts_adult ON posts(created_at DESC) WHERE is_adult = TRUE;
+CREATE INDEX IF NOT EXISTS idx_posts_content_type ON posts(content_type);
 
 -- ============================================================
 -- POST MEDIA
 -- ============================================================
-CREATE TABLE post_media (
+CREATE TABLE IF NOT EXISTS post_media (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id     UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   url         TEXT NOT NULL,
@@ -91,12 +101,12 @@ CREATE TABLE post_media (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_post_media_post ON post_media(post_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id, sort_order);
 
 -- ============================================================
 -- SOCIAL GRAPH
 -- ============================================================
-CREATE TABLE follows (
+CREATE TABLE IF NOT EXISTS follows (
   follower_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   following_id  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
@@ -104,18 +114,18 @@ CREATE TABLE follows (
   CHECK (follower_id != following_id)
 );
 
-CREATE INDEX idx_follows_following ON follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
 
-CREATE TABLE likes (
+CREATE TABLE IF NOT EXISTS likes (
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   post_id     UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (user_id, post_id)
 );
 
-CREATE INDEX idx_likes_post ON likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id);
 
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id     UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -125,25 +135,25 @@ CREATE TABLE comments (
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_comments_post ON comments(post_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, created_at);
 
 -- ============================================================
 -- MESSAGING
 -- ============================================================
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE conversation_participants (
+CREATE TABLE IF NOT EXISTS conversation_participants (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   joined_at       TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (conversation_id, user_id)
 );
 
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -152,12 +162,12 @@ CREATE TABLE messages (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_messages_conversation ON messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
 
 -- ============================================================
 -- NOTIFICATIONS
 -- ============================================================
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   type        notification_type NOT NULL,
@@ -166,12 +176,12 @@ CREATE TABLE notifications (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
 
 -- ============================================================
 -- PHASE 2: CREATOR MONETIZATION
 -- ============================================================
-CREATE TABLE creator_tiers (
+CREATE TABLE IF NOT EXISTS creator_tiers (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   creator_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
@@ -184,7 +194,7 @@ CREATE TABLE creator_tiers (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   subscriber_id   UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   creator_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -196,10 +206,10 @@ CREATE TABLE subscriptions (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_subscriptions_subscriber ON subscriptions(subscriber_id);
-CREATE INDEX idx_subscriptions_creator ON subscriptions(creator_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_subscriber ON subscriptions(subscriber_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_creator ON subscriptions(creator_id);
 
-CREATE TABLE tips (
+CREATE TABLE IF NOT EXISTS tips (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   sender_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   creator_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -213,7 +223,7 @@ CREATE TABLE tips (
 -- ============================================================
 -- PHASE 3: MARKETPLACE
 -- ============================================================
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   seller_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title         TEXT NOT NULL,
@@ -231,9 +241,9 @@ CREATE TABLE products (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_products_seller ON products(seller_id);
+CREATE INDEX IF NOT EXISTS idx_products_seller ON products(seller_id);
 
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   buyer_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   seller_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -246,7 +256,7 @@ CREATE TABLE orders (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   order_id    UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   product_id  UUID NOT NULL REFERENCES products(id),
@@ -257,7 +267,7 @@ CREATE TABLE order_items (
 -- ============================================================
 -- PHASE 4: COURSES
 -- ============================================================
-CREATE TABLE courses (
+CREATE TABLE IF NOT EXISTS courses (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   creator_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title         TEXT NOT NULL,
@@ -270,7 +280,7 @@ CREATE TABLE courses (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE lessons (
+CREATE TABLE IF NOT EXISTS lessons (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   title       TEXT NOT NULL,
@@ -280,7 +290,7 @@ CREATE TABLE lessons (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE enrollments (
+CREATE TABLE IF NOT EXISTS enrollments (
   user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   progress    JSONB DEFAULT '{}',
